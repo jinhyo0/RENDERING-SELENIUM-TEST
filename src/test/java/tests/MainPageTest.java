@@ -6,12 +6,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.openqa.selenium.By;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.devtools.DevTools;
+import org.openqa.selenium.devtools.latest.page.Page;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MainPageTest extends BaseTest {
     @Test
@@ -44,5 +49,35 @@ public class MainPageTest extends BaseTest {
         ).click();
 
         assertEquals(TestConfig.BASE_URL + expectedPath, driver.getCurrentUrl());
+    }
+
+
+    @Test
+    void autoplayFailureFallsBackToPoster() {
+        ChromeDriver chromeDriver = (ChromeDriver) driver;
+        DevTools devTools = chromeDriver.getDevTools();
+        devTools.createSession();
+
+        devTools.send(Page.enable(Optional.empty()));
+
+        // 자동재생 실패 상황 대처: play() 호출 시 항상 reject되도록
+        // 실제 iOS 저전력 모드 재현은 불가능하여 동일한 실패 결과를 유발하도록 대체함
+        String script =
+                "HTMLMediaElement.prototype.play = function() {" +
+                        " return Promise.reject(new DOMException('NotAllowedError'));" +
+                        "};";
+        devTools.send(Page.addScriptToEvaluateOnNewDocument(
+                script, Optional.empty(), Optional.empty(), Optional.empty()
+        ));
+
+        driver.get(TestConfig.BASE_URL);
+
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+        var poster = wait.until(
+                ExpectedConditions.visibilityOfElementLocated(By.cssSelector("img[alt='poster']"))
+        );
+
+        assertTrue(poster.isDisplayed());
     }
 }
